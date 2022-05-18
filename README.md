@@ -1,7 +1,7 @@
 # NVIDIA Docker Container 기반 DGX-A100 자원 관리 매뉴얼
 
 * 매뉴얼 작성자: 컴퓨터공학부 이재욱 교수님 연구실 석사 과정 민선홍(sunhongmin@snu.ac.kr), 인턴 백우현(baneling100@snu.ac.kr)
-* 마지막 수정일: 2022년 5월 16일
+* 마지막 수정일: 2022년 5월 18일
 
 ## 기본 가정
 * 본 매뉴얼은 컴퓨터공학부의 DGX-A100 머신을 기준으로 작성되었습니다.
@@ -111,7 +111,7 @@ NVIDIA Docker: 2.10.0
 $ curl https://get.docker.com | sh && sudo systemctl --now enable docker
 ```
 
-`Warning: the "docker" command appears to already exist on this system.`이 나오면 Ctrl+C를 눌러 해당 실행을 멈춘다.
+`Warning: the "docker" command appears to already exist on this system.`이 나오면 Ctrl+C를 눌러 해당 실행을 멈춥니다.
 
 ```console
 nvadmin@dgx-a100:~$ curl https://get.docker.com | sh && sudo systemctl --now enable docker
@@ -205,7 +205,7 @@ Mon May 16 03:18:49 2022
 
 기본적으로 DGX-A100 머신의 디스크는 `ext4` file system으로 설정되어 있고, Docker는 `overlay2` storage driver를 사용하고 있습니다. 그러나 `overlay2` storage driver의 경우 backing file system이 `ext4`이 아닌 `xfs`(with `ftype=1`, `pquota` mount option)로 되어 있어야 disk allocation이 가능합니다. 따라서 사전 작업으로 DGX-A100 머신 내에 `raid0`으로 묶여있는 `/dev/md1` 디스크를 `xfs` file system으로 초기화합니다. 해당 작업을 진행하면 `/dev/md1` 디스크의 내용이 전부 초기화되므로 mount point를 확인하고 필요한 데이터가 있다면 반드시 백업해두시기 바랍니다.
 
-1. 아래 명령어를 통해 DGX-A100 머신에 4개의 3.5TiB짜리 SSD가 `raid0` 옵션으로 묶여서 14TiB의 공간을 형성하고 있음을 알 수 있습니다.
+0. 아래 명령어를 통해 DGX-A100 머신에 4개의 3.5TiB짜리 SSD가 `raid0` 옵션으로 묶여서 14TiB의 공간을 형성하고 있음을 알 수 있습니다.
 
 ```console
 nvadmin@dgx-a100:~$ lsblk
@@ -236,13 +236,13 @@ Number  Start  End     Size    File system  Flags
  1      0.00B  15.4TB  15.4TB  ext4
 ```
 
-2. 우선 `lsblk`로 확인한 `MOUNTPOINT`인 `/raid`를 unmount 시킵니다.
+1. 우선 `lsblk`로 확인한 `MOUNTPOINT`인 `/raid`를 unmount 시킵니다.
 
 ```console
 nvadmin@dgx-a100:~$ sudo umount /raid
 ```
 
-3. `/dev/md1` 디스크를 `xfs`로 포맷합니다. 이 때 `-n ftype=1` 옵션을 반드시 주도록 합니다. `-f` 옵션은 디스크 내에 내용물이 있어도 강제로 overwrite하는 옵션입니다.
+2. `/dev/md1` 디스크를 `xfs`로 포맷합니다. 이 때 `-n ftype=1` 옵션을 반드시 주도록 합니다. `-f` 옵션은 디스크 내에 내용물이 있어도 강제로 overwrite하는 옵션입니다.
 
 ```console
 nvadmin@dgx-a100:~$ sudo mkfs.xfs -f -n ftype=1 /dev/md1
@@ -263,7 +263,7 @@ Number  Start  End     Size    File system  Flags
  1      0.00B  15.4TB  15.4TB  xfs
 ```
 
-4. 다음 명령어로 `/dev/md1`을 `/raid` 디렉토리로 mount 시킵니다. `-o pquota` 옵션을 반드시 포함해주시기 바랍니다. `df` 명령어로 제대로 mount가 됐는지 확인할 수 있습니다.
+3. 다음 명령어로 `/dev/md1`을 `/raid` 디렉토리로 mount 시킵니다. `-o pquota` 옵션을 반드시 포함해주시기 바랍니다. `df` 명령어로 제대로 mount가 됐는지 확인할 수 있습니다.
 
 ```console
 nvadmin@dgx-a100:~$ sudo mount -o pquota /dev/md1 /raid
@@ -272,33 +272,33 @@ Filesystem      Size  Used Avail Use% Mounted on
 /dev/md1         14T  100G   14T   1% /raid
 ```
 
-5. 모든 Docker container와 image를 삭제합니다.
+4. 모든 Docker container와 image를 삭제합니다.
 
 ```console
 $ sudo docker rm -f $(docker ps -aq); docker rmi -f $(docker images -q)
 ```
 
-6. Docker service를 중지합니다.
+5. Docker service를 중지합니다.
 
 ```console
 $ sudo systemctl stop docker
 ```
 
-7. Docker storage 디렉토리 내부를 비웁니다.
+6. Docker storage 디렉토리 내부를 비웁니다.
 
 ```console
 $ sudo rm -rf /var/lib/docker
 $ sudo mkdir /var/lib/docker
 ```
 
-8. `/raid` 내에 새로운 디렉토리를 만들어서 bind mount 합니다.
+7. `/raid` 내에 새로운 디렉토리를 만들어서 bind mount 합니다.
 
 ```console
 $ sudo mkdir /raid/docker
 $ sudo mount --rbind /raid/docker /var/lib/docker
 ```
 
-9. Docker service를 다시 시작합니다.
+8. Docker service를 다시 시작합니다.
 
 ```console
 $ sudo systemctl start docker
