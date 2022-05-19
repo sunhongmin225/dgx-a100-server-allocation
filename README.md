@@ -7,7 +7,7 @@
 * 본 매뉴얼은 컴퓨터공학부의 DGX-A100 머신을 기준으로 작성되었습니다.
 * 해당 머신은 x86_64 아키텍처를 사용하고 있으며 그 위에 Ubuntu 20.04.4 LTS 운영체제가 설치되어 있습니다.
 * 해당 머신에는 GPU 사용을 위한 NVIDIA Cuda Toolkit이 설치되어 있습니다. 아래와 같이 `nvidia-smi` 명령어를 통해 NVIDIA Cuda Toolkit 설치 여부를 확인할 수 있습니다. 만약 설치가 되어있지 않으면 [NVIDIA Cuda Toolkit 11.6 Update 2 Downloads](https://developer.nvidia.com/cuda-11-6-2-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=20.04&target_type=runfile_local)를 통해 설치해주시기 바랍니다.
-* CUDA는 크게 driver 단에서의 버전과 toolkit의 버전으로 나뉩니다. 전자는 `nvidia-smi`를 실행해서 확인할 수 있고, 후자는 `nvcc --version`으로 확인할 수 있습니다. Toolkit의 버전이 driver의 버전보다 낮거나 같을 때에는 문제가 없지만, 더 큰 경우에는 호환이 되지 않을 수 있습니다. 현재 CUDA toolkit이 11.7까지 나왔습니다만, driver 버전과의 호환을 위해 최신으로 업데이트하는 건 지양하길 바랍니다.
+* CUDA는 크게 driver 단에서의 버전과 toolkit의 버전으로 나뉩니다. 전자는 `nvidia-smi`를 실행해서 확인할 수 있고, 후자는 `nvcc --version`으로 확인할 수 있습니다. Toolkit의 버전이 driver의 버전보다 낮거나 같을 때에는 문제가 없지만, 더 큰 경우에는 호환이 되지 않을 수 있습니다. 현재 CUDA toolkit이 11.7까지 나왔습니다만, driver 버전과의 호환을 위해 최신으로 업데이트하는 건 지양하시길 바랍니다.
 
 ```console
 nvadmin@dgx-a100:~$ nvidia-smi
@@ -158,6 +158,8 @@ $ sudo systemctl restart docker
 
 5. Base CUDA Container 실행을 통한 설치 확인하기
 
+아래와 같이 `--gpus all` 옵션을 주고 실행했을 때 모든 GPU가 보이면 제대로 설치가 된 것입니다.
+
 ```console
 nvadmin@dgx-a100:~$ sudo docker run --rm --gpus all nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi
 Unable to find image 'nvidia/cuda:11.0.3-base-ubuntu20.04' locally
@@ -203,7 +205,7 @@ Mon May 16 03:18:49 2022
 
 ### III. DGX-A100에 Docker Disk allocation이 지원 가능한 File system 구축하기
 
-기본적으로 DGX-A100 머신의 디스크는 `ext4` file system으로 설정되어 있고, Docker는 `overlay2` storage driver를 사용하고 있습니다. 그러나 `overlay2` storage driver의 경우 backing file system이 `ext4`이 아닌 `xfs`(with `ftype=1`, `pquota` mount option)로 되어 있어야 disk allocation이 가능합니다. 따라서 사전 작업으로 DGX-A100 머신 내에 `raid0`으로 묶여있는 `/dev/md1` 디스크를 `xfs` file system으로 초기화합니다. 해당 작업을 진행하면 `/dev/md1` 디스크의 내용이 전부 초기화되므로 mount point를 확인하고 필요한 데이터가 있다면 반드시 백업해두시기 바랍니다.
+기본적으로 DGX-A100 머신의 디스크는 `ext4` file system으로 설정되어 있고, Docker는 `overlay2` storage driver를 사용하고 있습니다. 그러나 `overlay2` storage driver의 경우 호스트의 backing file system이 `ext4`가 아닌 `xfs`(with `ftype=1`, `pquota` mount option)로 되어 있어야 disk allocation이 가능합니다. 따라서 사전 작업으로 DGX-A100 머신 내에 `raid0`으로 묶여있는 `/dev/md1` 디스크를 `xfs` file system으로 초기화합니다. 해당 작업을 진행하면 `/dev/md1` 디스크의 내용이 전부 초기화되므로 mount point를 확인하고 필요한 데이터가 있다면 반드시 백업해두시기 바랍니다.
 
 0. 아래 명령어를 통해 DGX-A100 머신에 4개의 3.5TiB짜리 SSD가 `raid0` 옵션으로 묶여서 14TiB의 공간을 형성하고 있음을 알 수 있습니다.
 
@@ -236,7 +238,7 @@ Number  Start  End     Size    File system  Flags
  1      0.00B  15.4TB  15.4TB  ext4
 ```
 
-1. 우선 `lsblk`로 확인한 `MOUNTPOINT`인 `/raid`를 unmount 시킵니다.
+1. 우선 `lsblk`로 확인한 `MOUNTPOINT`인 `/raid`의 mount를 해제합니다.
 
 ```console
 nvadmin@dgx-a100:~$ sudo umount /raid
@@ -309,11 +311,13 @@ $ sudo systemctl start docker
 
 ### I. Google Form을 통한 수요 조사 진행
 
-* 기본 인적 사항 외에 원하는 1) GPU 개수, 2) CPU 코어 수, 3) Memory 용량, 4) Disk 용량, 5) 운영체제, 6) CUDA 버전, 7) cuDNN 버전(선택 사항)을 조사할 필요가 있습니다.
+* 기본 인적 사항 외에 원하는 1) GPU 개수, 2) Disk 용량, 3) 운영체제, 4) CUDA Toolkit 버전, 5) cuDNN 버전(선택 사항)을 조사할 필요가 있습니다.
+
+* CPU 코어 개수와 Memory 용량은 기본적으로 GPU 1개당 각각 32개와 128GB를 배분하는 것을 추천드립니다. CPU 코어와 Memory를 배분할 때 GPU NUMA Affinity를 고려해야하므로 이 둘은 수요 조사를 통해 정하기보다는 이런 식으로 개수와 용량을 정해두는 것이 좋을 것 같습니다. GPU NUMA Affinity에 대한 고려는 **III. 각 사용자에게 나눠줄 container 만들기**에서 예시를 통해 자세히 다룹니다.
 
 * **II. Dockerfile을 통한 image 빌드하기**에서 사용하게 될 Dockerfile의 명령어가 현재로서는 Ubuntu 운영체제를 가정하고 작성되었으므로 운영체제로는 Ubuntu 계열만을 보기로 넣을 것을 추천드립니다.
 
-* 수요 조사 예시: https://forms.gle/Y6iVQB3p6yadck3R9
+* 수요 조사 예시: https://forms.gle/gyPDd95oU1aySiTs9
 
 ### II. Dockerfile을 통한 image 빌드하기
 
@@ -352,11 +356,11 @@ $ docker image build --build-arg root_password=password --tag nvidia/cuda:11.4.0
 
 ### III. 각 사용자에게 나눠줄 container 만들기
 
-* 예시: 사용자가 GPU 2개, CPU 코어 32개, Memory 128GB, Disk 512GB를 선택한 경우
+* 예시: 사용자가 GPU 2개, Disk 512GB를 선택한 경우
 
 1. 사용자가 선택한 요구사항에 맞게 container를 만듭니다. (사용자명을 `user1`이라고 가정)
 
-우선 GPU Numa affinity를 확인하여 affinity rule에 위배되지 않는 GPU, CPU 조합이 available한지 확인합니다.
+우선 GPU Numa Affinity를 확인하여 Affinity rule에 위배되지 않는 GPU, CPU, Memory 조합이 available한지 확인합니다.
 
 ```console
 nvadmin@dgx-a100:~$ lscpu
@@ -372,10 +376,10 @@ NUMA node7 CPU(s):               112-127,240-255
 ...
 ```
 
-예를 들어, 위와 같은 경우에 GPU Node 1번을 할당한다면 CPU는 16-31번 혹은 144-159번 내에서 할당해줍니다. 아래와 같은 명령어로 할당을 완료합니다.
+예를 들어, 위와 같은 경우에 GPU Node 1번을 할당한다면 CPU는 16-31번 혹은 144-159번 내에서 할당해줍니다. Memory 노드는 GPU 노드 번호와 마찬가지로 1번을 할당해줍니다. 아래와 같은 명령어로 할당을 완료합니다.
 
 ```console
-$ docker container run --gpus '"device=0,1"' --cpus="32" -m 128G --storage-opt size=512G -d -P --name user1 nvidia/cuda:11.4.0-cudnn8-devel-ubuntu18.04-ssh
+$ docker container run --gpus '"device=0,1"' --cpus=64 --cpuset-cpus 0-31,128-159 --cpuset-mems 0,1 -m 256G --storage-opt size=512G -d -P --name user1 nvidia/cuda:11.4.0-cudnn8-devel-ubuntu18.04-ssh
 ```
 
 2. Container 포트가 몇 번인지 확인하고 기록해둡니다.
@@ -390,7 +394,7 @@ CONTAINER ID   IMAGE                                             COMMAND        
 
 ### IV. 실제 배포 및 각 사용자에게 전달할 자원 이용 설명서
 
-OOO님, 신청하신 DGX-A100 자원이 할당되었습니다. 신청하신 자원은 NVIDIA Docker container로 만들어졌으며 아래와 같은 방법으로 접속하실 수 있습니다. 초기 비밀번호는 `password`입니다.
+OOO님, 신청하신 DGX-A100 자원이 할당되었습니다. 신청하신 자원은 NVIDIA Docker Container로 만들어졌으며 아래와 같은 방법으로 접속하실 수 있습니다. 초기 비밀번호는 `password`입니다.
 
 ```console
 ssh -p 49160 root@147.46.92.213
@@ -400,17 +404,17 @@ ssh -p 49160 root@147.46.92.213
 
 * Container로 데이터를 보내고 받으실 때에는 다음과 같은 명령어를 사용하시면 됩니다.
 
-Container로 데이터를 보낼 경우
+    1. Container로 데이터를 보낼 경우
 
-```console
-user@desktop:~$ scp -P 49156 -r folder_to_send root@147.46.92.213:/root
-```
+    ```console
+    user@desktop:~$ scp -P 49156 -r folder_to_send root@147.46.92.213:/root
+    ```
 
-Container에서 데이터를 보낼 경우
+    2. Container에서 데이터를 보낼 경우
 
-```console
-root@194b0519ada6:~# scp -r folder_to_send user@<IP_ADDRESS>:/home/user
-```
+    ```console
+    root@194b0519ada6:~# scp -r folder_to_send user@<IP_ADDRESS>:/home/user
+    ```
 
 * 할당된 자원을 확인하실 때 `lscpu`, `free` 등의 명령어를 이용하시면 container가 아닌 host 머신 전체의 자원이 보이게 되므로 다른 방법을 사용하셔야 합니다. 아래와 같이 안내드립니다.
 
@@ -444,11 +448,11 @@ Tue May 17 10:00:30 2022
 +-----------------------------------------------------------------------------+
 ```
 
-2. CPU: 아래 명령어를 실행해서 나온 결과를 `10000`로 나눔.
+2. CPU: 아래 명령어를 실행해서 나온 결과를 `100000`로 나눔.
 
 ```console
 root@24ad5af18c98:~# cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us
-320000
+6400000
 ```
 
 3. Memory: 아래 명령어를 실행해서 나온 결과를 `1024 * 1024 * 1024`로 나눔 (GiB 단위).
@@ -456,7 +460,7 @@ root@24ad5af18c98:~# cat /sys/fs/cgroup/cpu/cpu.cfs_quota_us
 ```console
 root@24ad5af18c98:~# apt-get update && apt-get install -y cgroup-tools
 root@24ad5af18c98:~# cgget -n --values-only --variable memory.limit_in_bytes /
-137438953472
+274877906944
 ```
 
 4. Disk
@@ -483,7 +487,7 @@ nvadmin@dgx-a100:~$ docker ps
 CONTAINER ID   IMAGE                                             COMMAND                  CREATED          STATUS          PORTS                                     NAMES
 ```
 
-만들어뒀던 image는 재사용이 가능하므로 특별한 경우가 아니면 image는 바로 삭제하지는 않는 것을 추천드립니다. 수요 조사 결과 사용자들의 요구사항이 비슷하다면 같은 image로 container만 다르게 만들어서 배포하는 것이 가능하기 때문입니다. Image가 너무 많이 쌓여서 용량을 많이 차지하고 있다면 (`docker images` 명령어로 확인 가능) 다음과 같은 명령어로 image를 강제 삭제하시기 바랍니다. 단, image가 삭제 가능하려면 해당 image로 만든 container가 없어야 합니다. 또한, 위에서처럼 base image에 포트를 통한 SSH 접속이 가능케한 새로운 image를 만든 경우, 그 새로운 image를 먼저 삭제하고, 그 다음에 base image를 삭제해야 합니다.
+만들어뒀던 image는 재사용이 가능하므로 특별한 경우가 아니면 image는 바로 삭제하지는 않는 것을 추천드립니다. 수요 조사 결과 사용자들의 요구사항이 비슷하다면 같은 image로 container만 다르게 만들어서 배포하는 것이 가능하기 때문입니다. Image가 너무 많이 쌓여서 용량을 많이 차지하고 있다면 (`docker images` 명령어로 확인 가능) 다음과 같은 명령어로 image를 강제 삭제하시기 바랍니다. 단, image가 삭제 가능하려면 해당 image로 만든 container가 없어야 합니다. 또한 위에서처럼 base image에 포트를 통한 SSH 접속이 가능케한 새로운 image를 만든 경우, 그 새로운 image를 먼저 삭제하고, 그 다음에 base image를 삭제해야 합니다.
 
 ```console
 nvadmin@dgx-a100:~$ docker images
