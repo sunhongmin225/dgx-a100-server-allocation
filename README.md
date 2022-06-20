@@ -306,6 +306,34 @@ $ sudo mount --rbind /raid/docker /var/lib/docker
 $ sudo systemctl start docker
 ```
 
+9. (Opt.) Reboot을 할 경우에 mount 했던 것이 해제되면서 위의 작업을 다시 해줘야 합니다. 이를 방지하기 위해 `crontab -e`를 통해 reboot 시에 자동으로 실행될 script를 설정할 수 있습니다.
+
+우선 executable shell script를 만듭니다.
+
+```console
+nvadmin@dgx-a100:~$ touch raid_fs.sh
+nvadmin@dgx-a100:~$ chmod +x raid_fs.sh
+```
+
+해당 파일 안에 다음과 같은 내용을 작성해서 저장합니다.
+
+```console
+nvadmin@dgx-a100:~$ cat raid_fs.sh
+#!/bin/sh
+sudo mount -o pquota /dev/md1 /raid
+sudo docker rm -f $(docker ps -aq); docker rmi -f $(docker images -q)
+sudo systemctl stop docker
+sudo rm -rf /var/lib/docker
+sudo mkdir /var/lib/docker
+sudo mount --rbind /raid/docker /var/lib/docker
+sudo systemctl start docker
+```
+
+`crontab -e`를 실행하고 제일 끝 줄에 다음 문장을 추가합니다.
+
+```console
+@reboot /home/nvadmin/raid_fs.sh
+```
 
 ## 본 작업
 
